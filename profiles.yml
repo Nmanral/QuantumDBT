@@ -1,0 +1,39 @@
+QuantumDBT:
+  target: {{ env_var('TARGET') }}
+
+  outputs:
+    ci:
+      type: databricks
+      host: yourorg.databricks.com #your databricks host
+      http_path: /sql/1.0/warehouses/s3d4fkj9sah3 #your databricks sql warehouse url
+      schema: dev
+      threads: 4
+      token: {{ env_var('DATABRICKS_TOKEN') }} #NEVER write your token in plain text
+      type: databricks
+
+    dev:
+      type: databricks
+      host: yourorg.databricks.com #your databricks host
+      http_path: /sql/1.0/warehouses/s3d4fkj9sah3 #your databricks sql warehouse url
+      schema: dev
+      threads: 4
+      token: {{ env_var('DATABRICKS_TOKEN') }} #NEVER write your token in plain text
+      type: databricks
+  
+    preprod:
+      type: databricks
+      host: yourorg.databricks.com #your databricks host
+      http_path: /sql/1.0/warehouses/s3d4fkj9sah3 #your databricks sql warehouse url
+      schema: preprod_mart
+      threads: 4
+      token: {{ env_var('DATABRICKS_TOKEN') }} #NEVER write your token in plain text
+      type: databricks
+  
+    prod:
+      type: databricks
+      host: yourorg.databricks.com #your databricks host
+      http_path: /sql/1.0/warehouses/s3d4fkj9sah3 #your databricks sql warehouse url
+      schema: prod_mart
+      threads: 4
+      token: {{ env_var('DATABRICKS_TOKEN') }} #NEVER write your token in plain text
+      type: databricks

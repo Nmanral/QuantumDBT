@@ -1,0 +1,111 @@
+name: SQLFluff lint dbt models
+
+on:
+    # pull_request:
+    #     branches:
+    #         - main
+    #     paths:
+    #         - 'models/**/*.sql'
+    workflow_dispatch:
+
+jobs:
+    fix-and-comment:
+        runs-on: ubuntu-latest
+        steps:
+            - name: checkout
+              uses: actions/checkout@v2
+
+            - name: set up python
+              uses: actions/setup-python@v3
+              with:
+                python-version: '3.11'
+
+            - name: install dependencies
+              run: |
+                pip install sqlfluff sqlfuff-templater-dbt
+            
+            - name: get new and unchanged sql files
+              id: get_files_to_lint
+              shell: bash
+              run: |
+                git fetch origin main:refs/remotes/origin/main
+
+                git checkout -
+                
+                changed_files=$(git diff --nameo-only --diff-filter=AM origin/main..HEAD models | grep '.\sql$')
+
+                echo "::set-output name=lintees::$(echo $changed_files | tr '\n' ' ')"
+
+            - name: backup orginal files
+              run: |
+                for file in ${{ steps.get_files_to_lint.outputs.lintees }}
+                do
+                  cp "$file" "$file.bak"
+                done
+            
+            - name: fix dbt models
+              continue-on-error: true
+              if: steps.get_files_to_lint.outputs.lintees != ''
+              run: |
+                sqlfluff fix --force ${{ steps.get_files_to_lint.outputs.lintees }} --exclude-rules LT12,LT01
+            
+            - name: check for changes and prepare comment
+              if: success() && steps.get_files_to_lint.outputs.lintees != ''
+              id: prepare_comment
+              run: |
+                changes_made=false
+                for file in${{ steps.get_files_to_lint.outputs.lintees }}
+                do
+                  if ! cmp -s "$file.bak" "$file"; then
+                    channges_made=true
+                    break
+                  fi
+                done
+
+                if [ "$changes_made" = false ] then
+                    echo "NO_CHANGES=true" >> $GITHUB_ENV
+                else
+                    formatted_diff=""
+
+                    for file in ${{ steps.get_files_to_lint.outputs.lintees }}
+                    do
+                    if [ -s "$file" ]; then
+                        formatted_diff+=$'\n\n<details><summary>'"$file"$'</summary>\n\n```sql\n'"$(cat "$file")"$'\n```\n</details>'
+                    else
+                        formatted_diff+=$'\n\n'"$file is empty ot not redable."
+                    fi
+                    done
+
+
+                    echo "formatted_comment<<EOF" >> $GITHUB_ENV
+                    echo -e "$formatted_diff" >> $GITHUB_ENV
+                    echo "EOF" >> $GIHUB_ENV
+                    echo "NO_CHANGES=false" >> $GITHUB_ENV
+                fi
+            
+            - name: comment - no changes
+              if: env.NO_CHANGES == 'true'
+              uses: peter-evans/create-or-update-comment@v1
+              with:
+                issue-number: ${{ github.event.pull_request.number }}
+                body: All SQL files are linted and formatted as per the rules🎉
+            
+            - name: create or update comment changes
+              if: env.NO_CHANGES == 'false'
+              uses: peter-evans/create-or-update-comment@v1
+              with:
+                issue-number: ${{ github.event.pull_request.number }}
+                body: |
+                    Implement lint and format these SQL files and commit again.
+                    ${{ env.formatted_comment }}
+                token: ${{ secrets.GITHUB_TOKEN }}
+
+            - name: set merge block flag
+              if: env.NO_CHANGES == 'false'
+              run: echo "MERGE_BLOCKED=true" >> $GITHUB_ENV
+            
+            - name: prevent merge
+              if: env.MERGE_BLOCKED == 'true'
+              run: |
+                echo "Merging is blocked due to the completion of comment step."
+                exit 1

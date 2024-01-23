@@ -1,0 +1,63 @@
+name: Deploy static content on Pages
+on:
+    workflow_dispatch:
+
+env:
+    DBT_PROFILES_DIR: ./
+    DBT_USERNAME: pages
+    DBT_ACCESS_TOKEN: ${{ secrets.DBT_ACCESS_TOKEN }}
+    DBT_TARGET: dev
+    AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+    AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+
+permissions:
+    contents: read
+    pages: write
+    id-token: write
+
+concurrency:
+    group: "pages"
+    cancel-in-progress: true
+
+jobs:
+    deploy:
+        environment:
+            name: github-pages
+            url: ${{ steps.delpyment.outputs.url }}
+        runs-on: ubuntu-latest
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v3
+
+            - name: Setup Pages
+              uses: actions/configure-pages@v2
+
+            - name: Install Dependencies
+              run: |
+                pip install -r reuirements.txt
+
+            - name: Create dbt documentation
+              run: |
+                dbt docs generate
+
+            - name: Configure preproduction AWS creds
+              run: |
+                pip install awscli
+
+            - name: Push Manifest to S3
+              run: make push-manifest
+
+            - name: Archive Code coverage results
+              uses: actions/upload-artifact@v3
+              with:
+                  name: export_doc_generated
+                  path: target
+
+            - name: Upload Artifcats
+              uses: actions/upload-pages-artifact@v1
+              with:
+                  path: target
+
+            - name: Deploy to Pages 
+              id: deployment
+              uses: actions/deploy-pages@v1
